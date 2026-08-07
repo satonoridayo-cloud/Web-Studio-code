@@ -1,0 +1,1073 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>Mini Code Editor</title>
+
+<script>
+  window.__cmFailedScripts = [];
+  window.__cmLoadError = function(src){ window.__cmFailedScripts.push(src); };
+</script>
+
+<style>
+  :root{
+    --bg-titlebar:#3c3c3c;
+    --bg-sidebar:#252526;
+    --bg-editor:#1e1e1e;
+    --bg-tabs:#2d2d2d;
+    --bg-tab-active:#1e1e1e;
+    --bg-statusbar:#007acc;
+    --fg:#cccccc;
+    --fg-dim:#8a8a8a;
+    --accent:#0a84ff;
+    --border:#1b1b1b;
+    --hover:#2a2d2e;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0;padding:0;height:100%;
+    font-family:"Segoe UI","Yu Gothic UI",-apple-system,sans-serif;
+    background:var(--bg-editor);color:var(--fg);
+    overflow:hidden;
+  }
+  #app{display:flex;flex-direction:column;height:100vh;}
+
+  #titlebar{
+    height:30px;background:var(--bg-titlebar);
+    display:flex;align-items:center;justify-content:center;
+    font-size:12px;color:#e0e0e0;flex-shrink:0;
+    -webkit-user-select:none;user-select:none;
+    border-bottom:1px solid var(--border);
+  }
+  #main{flex:1;display:flex;min-height:0;}
+
+  /* ---- Sidebar (file explorer) ---- */
+  #sidebar{
+    width:230px;background:var(--bg-sidebar);flex-shrink:0;
+    display:flex;flex-direction:column;font-size:13px;
+    border-right:1px solid var(--border);min-width:160px;overflow:hidden;
+  }
+  #mdn-search{
+    display:flex;gap:4px;padding:8px;border-bottom:1px solid var(--border);flex-shrink:0;
+  }
+  #mdn-search input{
+    flex:1;min-width:0;background:#3c3c3c;border:1px solid #555;border-radius:3px;
+    color:#eee;font-size:12px;padding:4px 6px;outline:none;
+  }
+  #mdn-search input:focus{border-color:var(--accent);}
+  #mdn-search button{
+    background:#3a3d41;border:1px solid #555;color:#cccccc;border-radius:3px;
+    font-size:12px;padding:4px 8px;cursor:pointer;white-space:nowrap;
+  }
+  #mdn-search button:hover{background:#45494e;}
+
+  #sidebar-title{
+    padding:10px 14px 6px 20px;font-size:11px;letter-spacing:.5px;color:#bbbbbb;
+    text-transform:uppercase;-webkit-user-select:none;user-select:none;
+    display:flex;align-items:center;justify-content:space-between;flex-shrink:0;
+  }
+  .sidebar-actions{display:flex;gap:2px;}
+  .icon-btn{
+    background:transparent;border:none;color:#cccccc;cursor:pointer;
+    font-size:12px;padding:2px 4px;border-radius:3px;line-height:1;
+  }
+  .icon-btn:hover{background:var(--hover);}
+  #file-tree{flex:1;overflow-y:auto;min-height:0;}
+  .folder-row{
+    padding:4px 6px 4px 8px;display:flex;align-items:center;gap:5px;
+    color:#cccccc;cursor:pointer;-webkit-user-select:none;user-select:none;font-weight:600;
+  }
+  .folder-row:hover{background:var(--hover);}
+  .folder-row .row-actions{margin-left:auto;display:flex;gap:1px;opacity:0;transition:opacity .1s;}
+  .folder-row:hover .row-actions{opacity:1;}
+  .caret{display:inline-block;width:10px;font-size:9px;color:#8a8a8a;flex-shrink:0;text-align:center;}
+  .file-row{
+    padding:4px 8px 4px 28px;display:flex;align-items:center;gap:6px;
+    cursor:pointer;-webkit-user-select:none;user-select:none;color:#cccccc;
+  }
+  .file-row:hover{background:var(--hover);}
+  .file-row.active{background:#37373d;}
+  .file-row .row-actions{margin-left:auto;display:flex;gap:1px;opacity:0;transition:opacity .1s;}
+  .file-row:hover .row-actions{opacity:1;}
+  .file-dot{width:14px;height:14px;border-radius:3px;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#1e1e1e;}
+
+  #sidebar-footer{flex-shrink:0;border-top:1px solid var(--border);}
+  .footer-buttons{display:flex;flex-direction:column;gap:4px;padding:8px 10px;}
+  .footer-buttons button{
+    background:#3a3d41;border:1px solid #555;color:#cccccc;border-radius:4px;
+    font-size:11px;padding:5px 8px;cursor:pointer;text-align:left;
+  }
+  .footer-buttons button:hover{background:#45494e;}
+  #sidebar-hint{
+    padding:8px 14px 10px;font-size:11px;color:var(--fg-dim);line-height:1.5;
+  }
+  #sidebar-hint b{color:#dcdcaa;}
+  #sidebar-hint code{background:#333;padding:1px 4px;border-radius:3px;}
+
+  /* ---- Editor area ---- */
+  #editor-area{
+    flex:1;display:flex;flex-direction:column;min-width:200px;background:var(--bg-editor);
+  }
+  #tabs{
+    display:flex;background:var(--bg-tabs);flex-shrink:0;height:35px;
+    border-bottom:1px solid var(--border);-webkit-user-select:none;user-select:none;
+    overflow-x:auto;
+  }
+  .tab{
+    display:flex;align-items:center;gap:6px;padding:0 8px 0 14px;height:100%;
+    font-size:13px;color:#969696;background:var(--bg-tabs);
+    border-right:1px solid var(--border);cursor:pointer;white-space:nowrap;
+  }
+  .tab.active{background:var(--bg-tab-active);color:#ffffff;border-top:1px solid var(--accent);}
+  .tab .file-dot{width:8px;height:8px;border-radius:50%;}
+  .tab-close{margin-left:2px;opacity:.55;padding:0 4px;border-radius:3px;font-size:14px;line-height:1.4;}
+  .tab-close:hover{opacity:1;background:#484848;}
+
+  #editor-wrap{flex:1;position:relative;min-height:0;}
+  #monaco-container{position:absolute;inset:0;}
+  #empty-state{
+    position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+    flex-direction:column;gap:10px;color:var(--fg-dim);font-size:13px;background:var(--bg-editor);
+  }
+  #empty-state button{
+    background:#3a3d41;border:1px solid #555;color:#cccccc;border-radius:4px;
+    font-size:12px;padding:6px 14px;cursor:pointer;
+  }
+  #empty-state button:hover{background:#45494e;}
+
+  /* ---- Preview panel ---- */
+  #preview-panel{
+    width:42%;min-width:220px;display:flex;flex-direction:column;background:#ffffff;flex-shrink:0;
+  }
+  #preview-header{
+    height:35px;background:var(--bg-tabs);display:flex;align-items:center;
+    justify-content:space-between;padding:0 12px;font-size:12px;color:#cccccc;
+    border-bottom:1px solid var(--border);flex-shrink:0;-webkit-user-select:none;user-select:none;
+  }
+  #preview-header .dot-group{display:flex;gap:6px;}
+  #preview-header .dot{width:10px;height:10px;border-radius:50%;}
+  #preview-header .header-actions{display:flex;gap:6px;}
+  #preview-header button{
+    background:#3a3d41;border:1px solid #555;color:#cccccc;border-radius:4px;
+    font-size:11px;padding:3px 9px;cursor:pointer;
+  }
+  #preview-header button:hover{background:#45494e;}
+  #preview-frame{flex:1;border:none;background:#ffffff;}
+
+  /* ---- Status bar ---- */
+  #statusbar{
+    height:22px;background:var(--bg-statusbar);color:#ffffff;flex-shrink:0;
+    display:flex;align-items:center;justify-content:space-between;
+    font-size:12px;padding:0 10px;-webkit-user-select:none;user-select:none;
+  }
+  #statusbar .left, #statusbar .right{display:flex;gap:16px;align-items:center;}
+  #wrap-toggle{cursor:pointer;background:rgba(255,255,255,0.15);border-radius:3px;padding:0 6px;}
+  #wrap-toggle.on{background:rgba(255,255,255,0.35);}
+
+  /* resizers */
+  .resizer{width:4px;cursor:col-resize;background:transparent;flex-shrink:0;}
+  .resizer:hover, .resizer.dragging{background:var(--accent);}
+
+  /* ---- Error banner ---- */
+  #error-banner{
+    display:none;background:#5a1d1d;color:#ffd7d7;font-size:12px;
+    padding:6px 12px;border-bottom:1px solid #7a2a2a;flex-shrink:0;
+    white-space:pre-wrap;
+  }
+  #error-banner.show{display:block;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="titlebar">NameBy nori-Pixl  Web Studio code  ver12.5  PowerBy Monaco Editor</div>
+  <div id="error-banner"></div>
+
+  <div id="main">
+    <div id="sidebar">
+      <form action="https://developer.mozilla.org/ja/search" method="get" target="_blank" id="mdn-search" class="search-container">
+        <!-- name="q" と指定することでMDNがキーワードとして認識します -->
+        <input type="text" name="q" placeholder="MDNを検索 (例: background)" required>
+        <button type="submit">検索</button>
+      </form>
+      <div id="sidebar-title">
+        <span>エクスプローラー</span>
+        <span class="sidebar-actions">
+          <button class="icon-btn" id="add-root-file" title="新規ファイル">📄+</button>
+          <button class="icon-btn" id="add-root-folder" title="新規フォルダ">📁+</button>
+        </span>
+      </div>
+      <div class="folder-row" style="cursor:default;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="#c09553"><path d="M3 5h6l2 2h10v12H3z"/></svg>
+        MY-PROJECT
+      </div>
+      <div id="file-tree"></div>
+      <div id="sidebar-footer">
+        <div class="footer-buttons">
+          <button id="export-zip-btn">📦 ZIPでダウンロード</button>
+          <button id="export-json-btn">📥 JSONで保存</button>
+          <button id="import-json-btn">📤 JSONを読み込む</button>
+          <input type="file" id="import-json-input" accept="application/json" style="display:none">
+        </div>
+        <div id="sidebar-hint">
+          画像ファイルの追加は禁止です。<br>
+          画像を使いたい場合は <b>imgur</b> などの外部URLを<br>
+          <code>&lt;img src="https://i.imgur.com/xxxx.png"&gt;</code><br>
+          のように記述してください。プレビューは <code>index.html</code> を本体として、その中の <code>&lt;link rel="stylesheet" href="..."&gt;</code> と <code>&lt;script src="..."&gt;</code> が指すファイルだけを読み込みます。
+        </div>
+      </div>
+    </div>
+
+    <div class="resizer" id="resizer-left"></div>
+
+    <div id="editor-area">
+      <div id="tabs"></div>
+      <div id="editor-wrap">
+        <div id="monaco-container"></div>
+        <div id="empty-state">
+          <span>開いているファイルがありません</span>
+          <button id="empty-add-file-btn">📄+ 新しいファイルを作成</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="resizer" id="resizer-right"></div>
+
+    <div id="preview-panel">
+      <div id="preview-header">
+        <div class="dot-group">
+          <span class="dot" style="background:#ff5f57;"></span>
+          <span class="dot" style="background:#febc2e;"></span>
+          <span class="dot" style="background:#28c840;"></span>
+        </div>
+        <span>ライブプレビュー</span>
+        <div class="header-actions">
+          <button id="open-tab-btn">🔗 新しいタブで開く</button>
+          <button id="refresh-btn">再読み込み</button>
+        </div>
+      </div>
+      <iframe id="preview-frame" title="live preview"></iframe>
+    </div>
+  </div>
+
+  <div id="statusbar">
+    <div class="left">
+      <span>⚡ 準備完了</span>
+      <span id="current-file-label">index.html</span>
+    </div>
+    <div class="right">
+      <span id="cursor-pos">行 1, 列 1</span>
+      <span id="wrap-toggle" class="on">折り返し: ON</span>
+      <span>UTF-8</span>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" onerror="window.__cmLoadError && window.__cmLoadError(this.src)"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.53.0/min/vs/loader.js" onerror="window.__cmLoadError && window.__cmLoadError(this.src)"></script>
+
+<script>
+(function(){
+  function showFatalError(msg){
+    const el = document.getElementById('error-banner');
+    if(!el) return;
+    el.textContent = '⚠ ' + msg;
+    el.classList.add('show');
+  }
+  window.addEventListener('error', function(e){
+    // ワーカー生成失敗などで発生する素性不明の "Script error." はノイズなので
+    // コンソールに残すだけにし、赤いエラーバナーは実害のあるエラーだけに表示する
+    if(!e || !e.message || e.message === 'Script error.') { console.warn('Script error (詳細不明・無視):', e); return; }
+    showFatalError('スクリプトの読み込みまたは実行でエラーが発生しました: ' + (e.message || e.error || '不明なエラー'));
+  });
+
+  if(!window.require){
+    showFatalError('Monaco Editor (loader.js) の読み込みに失敗しました（ネットワーク接続や外部CDNへのアクセスを確認してください）。');
+    return;
+  }
+  if(window.__cmFailedScripts && window.__cmFailedScripts.length){
+    showFatalError('以下のファイルの読み込みに失敗しました:\n' + window.__cmFailedScripts.join('\n'));
+  }
+
+  const DEFAULT = {
+    html: `<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>My Page</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<h1>Hello, VSCode 風エディター</h1>
+<p>左のファイルを切り替えて編集してください。</p>
+<p>画像を使いたいときは imgur の直リンクを使ってね。</p>
+<img src="https://i.imgur.com/8fWjUOc.png" alt="サンプル画像" width="120">
+<button id="btn">クリックしてね</button>
+<script src="script.js"><\/script>
+</body>
+</html>`,
+    css: `/* style.css */
+body{
+  font-family: sans-serif;
+  padding: 24px;
+  background: #fafafa;
+  color: #222;
+}
+h1{ color: #0a84ff; }
+button{
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  background: #0a84ff;
+  color: #fff;
+  cursor: pointer;
+}
+button:hover{ background:#006fd6; }`,
+    js: `// script.js
+document.getElementById('btn').addEventListener('click', () => {
+  alert('動いてます！');
+});`
+  };
+
+  const EXT_LANG = { html:'html', htm:'html', css:'css', js:'javascript', mjs:'javascript', json:'json', md:'markdown', xml:'xml', txt:'plaintext' };
+  const EXT_COLOR = { html:'#e34c26', htm:'#e34c26', css:'#2965f1', js:'#f0db4f', mjs:'#f0db4f', json:'#8bc34a', md:'#42a5f5', xml:'#ff7043', txt:'#9e9e9e' };
+
+  function extOf(name){ const m = /\.([a-zA-Z0-9]+)$/.exec(name); return m ? m[1].toLowerCase() : ''; }
+  function langForName(name){ return EXT_LANG[extOf(name)] || 'plaintext'; }
+  function fileDotHtml(name, withLetter){
+    const ext = extOf(name);
+    const color = EXT_COLOR[ext] || '#9e9e9e';
+    const letter = withLetter ? (ext ? ext[0].toUpperCase() : '?') : '';
+    return `<span class="file-dot" style="background:${color}">${letter}</span>`;
+  }
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function newId(prefix){ return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+
+  // ---- state ----
+  let nodes = {};
+  let rootId = 'root';
+  let openTabs = [];
+  let activeId = null;
+  let editor = null;
+  const models = {};
+  let wrapOn = true;
+  const STORAGE_KEY = 'mini-code-editor:project:v1';
+  let autosaveTimer = null;
+  let previewTimer = null;
+
+  function setupDefaultProject(){
+    nodes = {};
+    rootId = 'root';
+    nodes[rootId] = { id: rootId, type:'folder', name:'MY-PROJECT', parentId:null, children:[], collapsed:false };
+    const f1 = addNodeSilent(rootId, 'file', 'index.html', DEFAULT.html);
+    const f2 = addNodeSilent(rootId, 'file', 'style.css', DEFAULT.css);
+    const f3 = addNodeSilent(rootId, 'file', 'script.js', DEFAULT.js);
+    openTabs = [f1, f2, f3];
+    activeId = f1;
+  }
+  function addNodeSilent(parentId, type, name, content){
+    const id = newId(type === 'file' ? 'n' : 'd');
+    if(type === 'file') nodes[id] = { id, type:'file', name, parentId, lang: langForName(name), content: content || '' };
+    else nodes[id] = { id, type:'folder', name, parentId, children:[], collapsed:false };
+    nodes[parentId].children.push(id);
+    return id;
+  }
+
+  // ---- persistence ----
+  function serializeProject(){ return { version:1, nodes, rootId, openTabs, activeId }; }
+  function scheduleAutosave(){ clearTimeout(autosaveTimer); autosaveTimer = setTimeout(saveToLocalStorage, 400); }
+  function saveToLocalStorage(){
+    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(serializeProject())); }
+    catch(e){ console.warn('localStorageへの保存に失敗:', e); }
+  }
+  function loadFromLocalStorage(){
+    try{
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(!raw) return null;
+      const data = JSON.parse(raw);
+      if(!data || !data.nodes || !data.rootId) return null;
+      return data;
+    }catch(e){ console.warn('localStorageの読み込みに失敗:', e); return null; }
+  }
+
+  // ---- tree helpers ----
+  function sortedChildren(folderId){
+    const folder = nodes[folderId];
+    return folder.children.slice().sort((a,b) => {
+      const na = nodes[a], nb = nodes[b];
+      if(na.type !== nb.type) return na.type === 'folder' ? -1 : 1;
+      return na.name.localeCompare(nb.name, 'ja');
+    });
+  }
+  function walkFiles(folderId, cb){
+    sortedChildren(folderId).forEach(id => {
+      const n = nodes[id];
+      if(n.type === 'folder') walkFiles(id, cb);
+      else cb(n);
+    });
+  }
+  function findIndexHtml(){
+    let found = null;
+    walkFiles(rootId, n => { if(!found && n.name.toLowerCase() === 'index.html') found = n; });
+    return found;
+  }
+  function collectByExt(exts){
+    // 現在は preview 生成では未使用（link/script src 解決に一本化）。
+    // 他機能から使う可能性があるため関数自体は残しておく。
+    const list = [];
+    walkFiles(rootId, n => { if(exts.includes(extOf(n.name))) list.push(n.content || ''); });
+    return list;
+  }
+  // ファイルの階層パス（例: "css/style.css"）を作る
+  function pathOf(id){
+    const segs = [];
+    let n = nodes[id];
+    while(n && n.id !== rootId){
+      segs.unshift(n.name);
+      n = nodes[n.parentId];
+    }
+    return segs.join('/');
+  }
+  function dirOf(id){
+    const segs = pathOf(id).split('/');
+    segs.pop();
+    return segs.join('/');
+  }
+  function buildPathIndex(){
+    const map = {};
+    walkFiles(rootId, n => { map[pathOf(n.id)] = n; });
+    return map;
+  }
+  // href/src の相対パスを、参照元ファイルのディレクトリを基準に解決する
+  function resolveRelativePath(baseDir, ref){
+    if(!ref) return null;
+    ref = ref.split('#')[0].split('?')[0];
+    if(/^https?:\/\//i.test(ref) || ref.startsWith('//') || ref.startsWith('data:')) return null; // 外部URLは対象外
+    const baseParts = baseDir ? baseDir.split('/') : [];
+    const refParts = ref.replace(/^\.\//, '').split('/');
+    const stack = ref.startsWith('/') ? [] : baseParts.slice();
+    refParts.forEach(p => {
+      if(p === '' || p === '.') return;
+      if(p === '..') stack.pop();
+      else stack.push(p);
+    });
+    return stack.join('/');
+  }
+
+  // ---- rendering ----
+  function renderTree(){
+    const container = document.getElementById('file-tree');
+    container.innerHTML = '';
+    renderFolderChildren(rootId, container, 0);
+  }
+  function renderFolderChildren(folderId, container, depth){
+    sortedChildren(folderId).forEach(id => {
+      const n = nodes[id];
+      if(n.type === 'folder'){
+        const row = document.createElement('div');
+        row.className = 'folder-row';
+        row.style.paddingLeft = (8 + depth * 14) + 'px';
+        row.innerHTML = `
+          <span class="caret">${n.collapsed ? '▸' : '▾'}</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="#c09553"><path d="M3 5h6l2 2h10v12H3z"/></svg>
+          <span class="folder-name">${escapeHtml(n.name)}</span>
+          <span class="row-actions">
+            <button class="icon-btn add-file-here" title="ここにファイルを追加">📄+</button>
+            <button class="icon-btn add-folder-here" title="ここにフォルダを追加">📁+</button>
+            <button class="icon-btn delete-item" title="フォルダを削除">🗑</button>
+          </span>`;
+        row.addEventListener('click', (e) => {
+          if(e.target.closest('.icon-btn')) return;
+          n.collapsed = !n.collapsed;
+          renderTree();
+        });
+        row.querySelector('.add-file-here').addEventListener('click', (e) => { e.stopPropagation(); addFile(id); });
+        row.querySelector('.add-folder-here').addEventListener('click', (e) => { e.stopPropagation(); addFolder(id); });
+        row.querySelector('.delete-item').addEventListener('click', (e) => { e.stopPropagation(); deleteNode(id); });
+        container.appendChild(row);
+        if(!n.collapsed) renderFolderChildren(id, container, depth + 1);
+      } else {
+        const row = document.createElement('div');
+        row.className = 'file-row' + (id === activeId ? ' active' : '');
+        row.style.paddingLeft = (28 + depth * 14) + 'px';
+        row.innerHTML = `${fileDotHtml(n.name, true)} <span class="file-name">${escapeHtml(n.name)}</span>
+          <span class="row-actions">
+            <button class="icon-btn delete-item" title="ファイルを削除">🗑</button>
+          </span>`;
+        row.addEventListener('click', (e) => {
+          if(e.target.closest('.icon-btn')) return;
+          openFile(id);
+        });
+        row.querySelector('.delete-item').addEventListener('click', (e) => { e.stopPropagation(); deleteNode(id); });
+        container.appendChild(row);
+      }
+    });
+  }
+
+  // ---- delete file / folder ----
+  function collectDescendantFileIds(id, acc){
+    const n = nodes[id];
+    if(!n) return acc;
+    if(n.type === 'file'){ acc.push(id); return acc; }
+    n.children.forEach(cid => collectDescendantFileIds(cid, acc));
+    return acc;
+  }
+  function deleteNode(id){
+    const n = nodes[id];
+    if(!n || id === rootId) return;
+    const label = n.type === 'folder' ? `フォルダ「${n.name}」とその中身すべて` : `ファイル「${n.name}」`;
+    if(!confirm(label + 'を削除しますか？この操作は元に戻せません。')) return;
+
+    const fileIds = collectDescendantFileIds(id, []);
+    fileIds.forEach(fid => {
+      if(models[fid]){ try{ models[fid].dispose(); }catch(e){} delete models[fid]; }
+    });
+    openTabs = openTabs.filter(tid => !fileIds.includes(tid));
+
+    (function removeRecursive(nid){
+      const nn = nodes[nid];
+      if(!nn) return;
+      if(nn.type === 'folder') nn.children.slice().forEach(removeRecursive);
+      delete nodes[nid];
+    })(id);
+
+    const parent = nodes[n.parentId];
+    if(parent){
+      const idx = parent.children.indexOf(id);
+      if(idx !== -1) parent.children.splice(idx, 1);
+    }
+
+    if(activeId && !nodes[activeId]){
+      activeId = openTabs.length ? openTabs[openTabs.length - 1] : null;
+    }
+
+    renderTree();
+    renderTabs();
+    if(activeId && nodes[activeId]){
+      ensureModel(activeId);
+      showEditorPane();
+      editor.setModel(models[activeId]);
+      document.getElementById('current-file-label').textContent = nodes[activeId].name;
+    } else {
+      showEmptyState();
+    }
+    updateCursorPos();
+    renderPreview();
+    scheduleAutosave();
+  }
+  function renderTabs(){
+    const container = document.getElementById('tabs');
+    container.innerHTML = '';
+    openTabs.forEach(id => {
+      const n = nodes[id];
+      if(!n) return;
+      const tab = document.createElement('div');
+      tab.className = 'tab' + (id === activeId ? ' active' : '');
+      tab.innerHTML = `${fileDotHtml(n.name, false)}<span class="tab-name">${escapeHtml(n.name)}</span><span class="tab-close" title="閉じる">×</span>`;
+      tab.addEventListener('click', () => openFile(id));
+      tab.querySelector('.tab-close').addEventListener('click', (e) => { e.stopPropagation(); closeTab(id); });
+      container.appendChild(tab);
+    });
+  }
+
+  // ---- file/folder creation ----
+  function addFile(parentId){
+    const name = prompt('新しいファイル名を入力してください(例: about.html)', 'newfile.html');
+    if(!name) return;
+    const trimmed = name.trim();
+    if(!trimmed || /[\/\\]/.test(trimmed)){ alert('ファイル名が不正です'); return; }
+    const parent = nodes[parentId];
+    if(parent.children.some(cid => nodes[cid].name === trimmed)){ alert('同じ名前のファイル/フォルダが既に存在します'); return; }
+    const id = newId('n');
+    nodes[id] = { id, type:'file', name: trimmed, parentId, lang: langForName(trimmed), content: '' };
+    parent.children.push(id);
+    parent.collapsed = false;
+    openFile(id);
+  }
+  function addFolder(parentId){
+    const name = prompt('新しいフォルダ名を入力してください', 'new-folder');
+    if(!name) return;
+    const trimmed = name.trim();
+    if(!trimmed || /[\/\\]/.test(trimmed)){ alert('フォルダ名が不正です'); return; }
+    const parent = nodes[parentId];
+    if(parent.children.some(cid => nodes[cid].name === trimmed)){ alert('同じ名前のファイル/フォルダが既に存在します'); return; }
+    const id = newId('d');
+    nodes[id] = { id, type:'folder', name: trimmed, parentId, children:[], collapsed:false };
+    parent.children.push(id);
+    parent.collapsed = false;
+    renderTree();
+    scheduleAutosave();
+  }
+
+  // ---- tab / model management ----
+  function ensureModel(id){
+    if(models[id]) return models[id];
+    const node = nodes[id];
+    const model = monaco.editor.createModel(node.content || '', node.lang || 'plaintext');
+    model.onDidChangeContent(() => {
+      node.content = model.getValue();
+      renderPreview();
+      scheduleAutosave();
+    });
+    models[id] = model;
+    return model;
+  }
+  function showEditorPane(){ document.getElementById('empty-state').style.display = 'none'; }
+  function showEmptyState(){
+    document.getElementById('empty-state').style.display = 'flex';
+    document.getElementById('current-file-label').textContent = '(ファイルなし)';
+  }
+  function openFile(id){
+    if(!nodes[id] || nodes[id].type !== 'file') return;
+    if(!openTabs.includes(id)) openTabs.push(id);
+    activeId = id;
+    ensureModel(id);
+    showEditorPane();
+    editor.setModel(models[id]);
+    editor.focus();
+    document.getElementById('current-file-label').textContent = nodes[id].name;
+    renderTabs();
+    renderTree();
+    updateCursorPos();
+    scheduleAutosave();
+  }
+  function closeTab(id){
+    const idx = openTabs.indexOf(id);
+    if(idx === -1) return;
+    openTabs.splice(idx, 1);
+    if(activeId === id){
+      if(openTabs.length){
+        activeId = openTabs[Math.max(0, idx - 1)];
+        showEditorPane();
+        editor.setModel(models[activeId]);
+        document.getElementById('current-file-label').textContent = nodes[activeId].name;
+        updateCursorPos();
+      } else {
+        activeId = null;
+        showEmptyState();
+      }
+    }
+    renderTabs();
+    renderTree();
+    scheduleAutosave();
+  }
+  function updateCursorPos(){
+    if(!editor) return;
+    const pos = editor.getPosition();
+    if(!pos) return;
+    document.getElementById('cursor-pos').textContent = `行 ${pos.lineNumber}, 列 ${pos.column}`;
+  }
+
+  // ---- HTML タグ自動クローズ ----
+  // Monaco 標準の editor.autoClosingTags は実在しないオプションで無効なので、
+  // <h1> のようなタグを閉じたら自前で </h1> を挿入する。
+  const VOID_TAGS = ['area','base','br','col','embed','hr','img','input','link','meta','param','source','track','wbr'];
+  function setupHtmlTagAutoClose(ed){
+    ed.onDidType(function(text){
+      if(text !== '>') return;
+      const model = ed.getModel();
+      if(!model || model.getLanguageId() !== 'html') return;
+      const pos = ed.getPosition();
+      const line = model.getLineContent(pos.lineNumber);
+      const before = line.slice(0, pos.column - 1);
+      const after = line.slice(pos.column - 1);
+
+      // <> （タグ名なし）→ </> を挿入
+      if(/<$/.test(before)){
+        if(after.slice(0, 3) === '</>') return;
+        insertAfterCursor(ed, pos, '</>');
+        return;
+      }
+
+      const m = before.match(/<([a-zA-Z][a-zA-Z0-9-]*)((?:\s[^<>]*)?)>$/);
+      if(!m) return;
+      const tag = m[1];
+      const attrs = m[2] || '';
+      if(/\/\s*$/.test(attrs)) return;               // <br/> のような自己終了
+      if(VOID_TAGS.includes(tag.toLowerCase())) return; // 閉じタグを持たない要素
+      const closeRe = new RegExp('^</' + tag + '\\s*>', 'i');
+      if(closeRe.test(after)) return;                  // 既に閉じタグがある
+      insertAfterCursor(ed, pos, '</' + tag + '>');
+    });
+  }
+  function insertAfterCursor(ed, pos, text){
+    ed.executeEdits('auto-close-tag', [{
+      range: new monaco.Range(pos.lineNumber, pos.column, pos.lineNumber, pos.column),
+      text: text,
+      forceMoveMarkers: true
+    }]);
+    ed.setPosition(pos); // カーソルは開始タグと終了タグの間のまま
+  }
+
+  // ---- HTML: <h1> と </h1> の間で Enter → 3行に展開 ----
+  function setupHtmlSmartEnter(ed){
+    ed.onKeyDown(function(e){
+      if(e.keyCode !== monaco.KeyCode.Enter) return;
+      const model = ed.getModel();
+      if(!model || model.getLanguageId() !== 'html') return;
+      const pos = ed.getPosition();
+      const line = model.getLineContent(pos.lineNumber);
+      const before = line.slice(0, pos.column - 1);
+      const after = line.slice(pos.column - 1);
+      const m = before.match(/<([a-zA-Z][a-zA-Z0-9-]*)(?:\s[^<>]*)?>$/);
+      if(!m) return;
+      const tag = m[1];
+      const closeRe = new RegExp('^</' + tag + '\\s*>', 'i');
+      if(!closeRe.test(after)) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      const curIndent = (line.match(/^\s*/) || [''])[0];
+      const innerIndent = curIndent + '  ';
+      ed.executeEdits('smart-enter-tag', [{
+        range: new monaco.Range(pos.lineNumber, pos.column, pos.lineNumber, pos.column),
+        text: '\n' + innerIndent + '\n' + curIndent,
+        forceMoveMarkers: true
+      }]);
+      ed.setPosition({ lineNumber: pos.lineNumber + 1, column: innerIndent.length + 1 });
+    });
+  }
+
+  // ---- live preview ----
+  // index.html 内の <link rel="stylesheet" href="..."> と <script src="...">
+  // を、エクスプローラー内の実ファイルに解決してインライン化する。
+  // さらに、<a href="他のhtmlファイル"> によるページ内リンクも解決し、
+  // プレビュー内でクリックした時に該当ファイルへ切り替えられるようにする。
+  function buildResolvedDocString(node, pathIndex){
+    const baseDir = dirOf(node.id);
+    const doc = new DOMParser().parseFromString(node.content || '', 'text/html');
+
+    doc.querySelectorAll('link[rel="stylesheet"][href]').forEach(link => {
+      const resolved = resolveRelativePath(baseDir, link.getAttribute('href'));
+      const fileNode = resolved != null ? pathIndex[resolved] : null;
+      const style = doc.createElement('style');
+      style.textContent = fileNode
+        ? (fileNode.content || '')
+        : `/* 見つかりません: ${link.getAttribute('href')} */`;
+      link.replaceWith(style);
+    });
+
+    doc.querySelectorAll('script[src]').forEach(script => {
+      const resolved = resolveRelativePath(baseDir, script.getAttribute('src'));
+      const fileNode = resolved != null ? pathIndex[resolved] : null;
+      const newScript = doc.createElement('script');
+      if(script.getAttribute('type')) newScript.setAttribute('type', script.getAttribute('type'));
+      newScript.textContent = fileNode
+        ? (fileNode.content || '')
+        : `console.warn(${JSON.stringify('見つかりません: ' + script.getAttribute('src'))});`;
+      script.replaceWith(newScript);
+    });
+
+    if(!doc.querySelector('meta[charset]')){
+      const meta = doc.createElement('meta');
+      meta.setAttribute('charset', 'UTF-8');
+      doc.head.prepend(meta);
+    }
+
+    return '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+  }
+
+  // <script> の中に埋め込む JSON 文字列は、中身にたまたま "</script" という
+  // バイト列が含まれているとそこでタグが終わったと解釈されてしまうため無害化する
+  function safeScriptJson(obj){
+    return JSON.stringify(obj).replace(/<\/script/gi, '<\\/script');
+  }
+
+  function buildNavBootstrapJs(pages, entryPath){
+    return `
+window.__PAGES__ = ${safeScriptJson(pages)};
+window.__resolvePath = function(baseDir, href){
+  href = href.split('#')[0].split('?')[0];
+  if(/^https?:\\/\\//i.test(href) || href.indexOf('//') === 0 || href.indexOf('mailto:') === 0 || href.indexOf('tel:') === 0 || href.indexOf('javascript:') === 0) return null;
+  var baseParts = baseDir ? baseDir.split('/') : [];
+  var refParts = href.replace(/^\\.\\//, '').split('/');
+  var stack = href.indexOf('/') === 0 ? [] : baseParts.slice();
+  refParts.forEach(function(p){
+    if(p === '' || p === '.') return;
+    if(p === '..') stack.pop(); else stack.push(p);
+  });
+  return stack.join('/');
+};
+window.__attachNav = function(currentPath){
+  document.addEventListener('click', function(e){
+    var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+    if(!a) return;
+    var baseParts = currentPath.split('/'); baseParts.pop();
+    var target = window.__resolvePath(baseParts.join('/'), a.getAttribute('href'));
+    if(target && window.__PAGES__ && Object.prototype.hasOwnProperty.call(window.__PAGES__, target)){
+      e.preventDefault();
+      window.__navigateTo(target);
+    }
+  });
+};
+window.__navigateTo = function(target){
+  if(!window.__PAGES__ || !Object.prototype.hasOwnProperty.call(window.__PAGES__, target)) return false;
+  document.open();
+  document.write(window.__PAGES__[target]);
+  document.close();
+  window.__attachNav(target);
+  return true;
+};
+window.__attachNav(${JSON.stringify(entryPath)});
+`;
+  }
+
+  function buildPreviewHtml(){
+    const indexNode = findIndexHtml();
+    if(!indexNode){
+      return '<p style="font-family:sans-serif;color:#888;padding:24px;">index.html が見つかりません</p>';
+    }
+    const pathIndex = buildPathIndex();
+    const entryPath = pathOf(indexNode.id);
+
+    // プロジェクト内の html ファイルをすべて解決してページ集合を作る
+    const pages = {};
+    Object.keys(pathIndex).forEach(p => {
+      if(/\.(html?|htm)$/i.test(p)) pages[p] = buildResolvedDocString(pathIndex[p], pathIndex);
+    });
+
+    const entryDoc = new DOMParser().parseFromString(pages[entryPath], 'text/html');
+    const navScript = entryDoc.createElement('script');
+    navScript.textContent = buildNavBootstrapJs(pages, entryPath);
+    entryDoc.body.appendChild(navScript);
+
+    return '<!DOCTYPE html>\n' + entryDoc.documentElement.outerHTML;
+  }
+
+  function renderPreview(){
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(() => {
+      document.getElementById('preview-frame').srcdoc = buildPreviewHtml();
+    }, 250);
+  }
+
+  // window.open('about:blank') + document.write で、サンドボックスされた
+  // iframe の外（本物のタブ）にプレビューを開く
+  function openPreviewInNewTab(){
+    const html = buildPreviewHtml();
+    const newWin = window.open('about:blank', '_blank');
+    if(!newWin){
+      alert('新しいタブを開けませんでした。ブラウザのポップアップブロックを許可してください。');
+      return;
+    }
+    newWin.document.open();
+    newWin.document.write(html);
+    newWin.document.close();
+  }
+
+  // ---- ZIP export ----
+  function addNodeToZip(zipFolder, nodeId){
+    sortedChildren(nodeId).forEach(id => {
+      const n = nodes[id];
+      if(n.type === 'folder'){
+        addNodeToZip(zipFolder.folder(n.name), id);
+      } else {
+        zipFolder.file(n.name, n.content || '');
+      }
+    });
+  }
+  function exportZip(){
+    if(typeof JSZip === 'undefined'){
+      alert('ZIP出力に必要なライブラリ(JSZip)の読み込みに失敗しています。ネットワーク接続を確認して再読み込みしてください。');
+      return;
+    }
+    try{
+      const zip = new JSZip();
+      addNodeToZip(zip, rootId);
+      zip.generateAsync({ type: 'blob' }).then(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = (nodes[rootId] && nodes[rootId].name ? nodes[rootId].name : 'project') + '.zip';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      });
+    }catch(e){
+      console.error('ZIPエクスポート失敗:', e);
+      alert('ZIPの生成に失敗しました: ' + e.message);
+    }
+  }
+
+  // ---- JSON export / import ----
+  function setupImportExport(){
+    document.getElementById('export-zip-btn').addEventListener('click', exportZip);
+    document.getElementById('export-json-btn').addEventListener('click', () => {
+      try{
+        const data = serializeProject();
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'mini-code-editor-project.json';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }catch(e){
+        console.error('エクスポート失敗:', e);
+        alert('エクスポートに失敗しました。プレビュー環境の制限の可能性があります。通常のブラウザタブで開いて試してください。');
+      }
+    });
+    document.getElementById('import-json-btn').addEventListener('click', () => {
+      document.getElementById('import-json-input').click();
+    });
+    document.getElementById('import-json-input').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if(!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try{ applyProjectData(JSON.parse(reader.result)); }
+        catch(err){ alert('JSONの読み込みに失敗しました: ' + err.message); }
+      };
+      reader.readAsText(file);
+      e.target.value = '';
+    });
+  }
+  function applyProjectData(data){
+    if(!data || !data.nodes || !data.rootId){ alert('不正なプロジェクトファイルです'); return; }
+    Object.values(models).forEach(m => { try{ m.dispose(); }catch(e){} });
+    Object.keys(models).forEach(k => delete models[k]);
+    nodes = data.nodes;
+    rootId = data.rootId;
+    openTabs = Array.isArray(data.openTabs) ? data.openTabs.filter(id => nodes[id] && nodes[id].type === 'file') : [];
+    activeId = (data.activeId && nodes[data.activeId]) ? data.activeId : (openTabs[0] || null);
+    if(activeId && !openTabs.includes(activeId)) openTabs.push(activeId);
+    renderTree();
+    renderTabs();
+    if(activeId){
+      ensureModel(activeId);
+      showEditorPane();
+      editor.setModel(models[activeId]);
+      document.getElementById('current-file-label').textContent = nodes[activeId].name;
+    } else {
+      showEmptyState();
+    }
+    updateCursorPos();
+    renderPreview();
+    scheduleAutosave();
+  }
+
+  // ---- resizers ----
+  function setupResizers(){
+    const main = document.getElementById('main');
+    const sidebar = document.getElementById('sidebar');
+    const previewPanel = document.getElementById('preview-panel');
+    const left = document.getElementById('resizer-left');
+    const right = document.getElementById('resizer-right');
+    let draggingLeft = false, draggingRight = false;
+
+    left.addEventListener('mousedown', () => { draggingLeft = true; left.classList.add('dragging'); });
+    right.addEventListener('mousedown', () => { draggingRight = true; right.classList.add('dragging'); });
+    window.addEventListener('mousemove', (e) => {
+      if(!draggingLeft && !draggingRight) return;
+      const mainRect = main.getBoundingClientRect();
+      if(draggingLeft){
+        let w = e.clientX - mainRect.left;
+        w = Math.max(160, Math.min(w, mainRect.width - previewPanel.getBoundingClientRect().width - 300));
+        sidebar.style.width = w + 'px';
+      }
+      if(draggingRight){
+        let w = mainRect.right - e.clientX;
+        w = Math.max(220, Math.min(w, mainRect.width - sidebar.getBoundingClientRect().width - 300));
+        previewPanel.style.width = w + 'px';
+      }
+      if(editor) editor.layout();
+    });
+    window.addEventListener('mouseup', () => {
+      draggingLeft = false; draggingRight = false;
+      left.classList.remove('dragging'); right.classList.remove('dragging');
+    });
+  }
+
+  // ---- Monaco worker設定 ----
+  // ※ Claude Artifacts のサンドボックス化された iframe 内では、外部CDNのワーカー
+  //    スクリプトを blob/data URL 経由で読み込もうとすると CSP に阻まれて
+  //    "Script error." が連発することがある。MonacoEnvironment を上書きせず
+  //    Monaco 本体の標準フォールバック（メインスレッド実行）に任せることで、
+  //    軽い警告が1回出るだけの安全な動作にする。
+  const MONACO_BASE = 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.53.0/min/vs';
+  require.config({ paths: { vs: MONACO_BASE } });
+  window.require.onError = function(err){
+    console.error('[monaco] require エラー:', err);
+    showFatalError('Monaco Editor のモジュール読み込みに失敗しました: ' + (err && err.message ? err.message : String(err)));
+  };
+
+  require(['vs/editor/editor.main'], function(){
+    try{ init(); }
+    catch(e){ console.error('Monaco 初期化失敗:', e); showFatalError('エディターの初期化に失敗しました: ' + e.message); }
+  }, function(err){
+    console.error('[monaco] モジュール読み込み失敗:', err);
+    showFatalError('Monaco Editor 本体の読み込みに失敗しました（ネットワーク接続や外部CDNへのアクセスを確認してください）。');
+  });
+
+  function init(){
+    const loaded = loadFromLocalStorage();
+    if(loaded){
+      nodes = loaded.nodes;
+      rootId = loaded.rootId;
+      openTabs = Array.isArray(loaded.openTabs) ? loaded.openTabs.filter(id => nodes[id] && nodes[id].type === 'file') : [];
+      activeId = (loaded.activeId && nodes[loaded.activeId]) ? loaded.activeId : (openTabs[0] || null);
+    } else {
+      setupDefaultProject();
+    }
+
+    editor = monaco.editor.create(document.getElementById('monaco-container'), {
+      theme: 'vs-dark',
+      automaticLayout: true,
+      fontSize: 14,
+      fontFamily: '"Cascadia Code","Consolas","SF Mono",monospace',
+      tabSize: 2,
+      insertSpaces: true,
+      wordWrap: wrapOn ? 'on' : 'off',
+      minimap: { enabled: false },
+      autoClosingTags: true,
+      autoClosingBrackets: 'always',
+      autoClosingQuotes: 'always',
+      autoSurround: 'languageDefined',
+      quickSuggestions: true,
+      suggestOnTriggerCharacters: true,
+      wordBasedSuggestions: 'currentDocument',
+      scrollBeyondLastLine: false,
+      renderWhitespace: 'selection'
+    });
+    editor.onDidChangeCursorPosition(updateCursorPos);
+    setupHtmlTagAutoClose(editor);
+    setupHtmlSmartEnter(editor);
+
+    renderTree();
+    renderTabs();
+    if(activeId && nodes[activeId]){
+      ensureModel(activeId);
+      editor.setModel(models[activeId]);
+      document.getElementById('current-file-label').textContent = nodes[activeId].name;
+      showEditorPane();
+    } else {
+      showEmptyState();
+    }
+    updateCursorPos();
+    renderPreview();
+
+    document.getElementById('add-root-file').addEventListener('click', () => addFile(rootId));
+    document.getElementById('add-root-folder').addEventListener('click', () => addFolder(rootId));
+    document.getElementById('empty-add-file-btn').addEventListener('click', () => addFile(rootId));
+    document.getElementById('refresh-btn').addEventListener('click', renderPreview);
+    document.getElementById('open-tab-btn').addEventListener('click', openPreviewInNewTab);
+    document.getElementById('wrap-toggle').addEventListener('click', () => {
+      wrapOn = !wrapOn;
+      editor.updateOptions({ wordWrap: wrapOn ? 'on' : 'off' });
+      const el = document.getElementById('wrap-toggle');
+      el.textContent = '折り返し: ' + (wrapOn ? 'ON' : 'OFF');
+      el.classList.toggle('on', wrapOn);
+    });
+
+    setupImportExport();
+    setupResizers();
+  }
+})();
+</script>
+</body>
+</html>
